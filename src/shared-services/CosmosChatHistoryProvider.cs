@@ -313,7 +313,7 @@ public sealed class CosmosChatHistoryProvider : ChatHistoryProvider, IDisposable
                     initialCount,
                     messages.Count);
 
-                await ApplyReductionStrategyAsync(state, documents, messages ,cancellationToken).ConfigureAwait(false);
+                await ApplyReductionStrategyAsync(state, documents, messages, cancellationToken).ConfigureAwait(false);
                 
             }
         }
