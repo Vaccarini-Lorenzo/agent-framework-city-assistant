@@ -81,3 +81,5 @@ Thumbs.db
 .aspire/
 */*.Development.Json
 **/*.Development.Json
+**/aspire/appsettings.json
+**/aspire-install.sh
