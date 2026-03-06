@@ -20,10 +20,7 @@ builder.Services.AddControllers();
 // Add logic to validate incoming tokens from the Bot Service.
 builder.Services.AddAgentAspNetAuthentication(builder.Configuration);
 
-
-// builder.Services.Configure<OrchestratorA2AOptions>(builder.Configuration.GetSection(OrchestratorA2AOptions.SectionName));
-// builder.Services.AddHttpClient<OrchestratorA2AClient>();
-
+builder.Services.AddA2AAgents();
 
 WebApplication app = builder.Build();
 // Enable AspNet authentication and authorization

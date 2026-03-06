@@ -7,17 +7,19 @@ using Microsoft.Agents.Builder.State;
 using Microsoft.Agents.Core.Models;
 using A2A;
 using BotService.Clients;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
 internal sealed class M365Agent : AgentApplication
 {
     private readonly string? _welcomeMessage;
-    //b private readonly OrchestratorA2AClient _orchestratorA2AClient;
+    private readonly AIAgent _orchestratorA2AAgent;
 
     public M365Agent(
-        // OrchestratorA2AClient orchestratorA2AClient,
+        AIAgent orchestratorA2AAgent,
         AgentApplicationOptions options) : base(options)
     {
-        // _orchestratorA2AClient = orchestratorA2AClient;
+        this._orchestratorA2AAgent = orchestratorA2AAgent ?? throw new ArgumentNullException(nameof(orchestratorA2AAgent));
         _welcomeMessage = "Login successful! You can now interact with the agent.";
         this.OnConversationUpdate(ConversationUpdateEvents.MembersAdded, this.WelcomeMessageAsync);
         this.OnActivity(ActivityTypes.Message, this.MessageActivityAsync, rank: RouteRank.Last);
@@ -34,12 +36,14 @@ internal sealed class M365Agent : AgentApplication
             return;
         }
 
+        AgentResponse response = await this._orchestratorA2AAgent.RunAsync(new ChatMessage(ChatRole.User, userMessage), cancellationToken: cancellationToken);
+
         // string orchestratorResponse = await _orchestratorA2AClient.SendUserMessageAsync(
         //     conversationId,
         //     userMessage,
         //     cancellationToken);
 
-        // await turnContext.SendActivityAsync(MessageFactory.Text(orchestratorResponse), cancellationToken);
+        await turnContext.SendActivityAsync(MessageFactory.Text(response.Text), cancellationToken);
     }
 
     private async Task WelcomeMessageAsync(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
