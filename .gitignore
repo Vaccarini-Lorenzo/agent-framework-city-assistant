@@ -83,3 +83,6 @@ Thumbs.db
 **/*.Development.Json
 **/aspire/appsettings.json
 **/aspire-install.sh
+
+# Bot Framework
+**/bot-service/appsettings.json

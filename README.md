@@ -101,14 +101,30 @@ Data Flow:
 To allow Aspire to create or reference existing resources on Azure (e.g. Foundry), you need to configure Azure settings in the [appsettings.json](./src/aspire/appsettings.json) file:
 
 ```json
-"Azure": {
-  "TenantId": "<YOUR-TENANT-ID>",
-  "SubscriptionId": "<YOUR-SUBSCRIPTION-ID>",
-  "AllowResourceGroupCreation": false,
-  "Location": "<YOUR-LOCATION>",
-  "CredentialSource": "AzureCli"
+{
+  "Azure": {
+    "TenantId": "<YOUR-TENANT-ID>",
+    "SubscriptionId": "<YOUR-SUBSCRIPTION-ID>",
+    "AllowResourceGroupCreation": false,
+    "Location": "<YOUR-LOCATION>",
+    "CredentialSource": "AzureCli"
+  },
+  "Parameters": {
+    "existingFoundryName": "<YOUR-FOUNDRY-NAME>",
+    "existingFoundryResourceGroup": "<YOUR-RESOURCE-GROUP-NAME>"
+  }
 }
 ```
+
+| Property | Description |
+|---|---|
+| `TenantId` | Your Azure Active Directory tenant ID |
+| `SubscriptionId` | Your Azure subscription ID |
+| `AllowResourceGroupCreation` | Set to `true` if you want Aspire to create a new resource group |
+| `Location` | Azure region for your resources (e.g. `eastus`, `italynorth`) |
+| `CredentialSource` | Authentication method — use `AzureCli` after running `az login` |
+| `existingFoundryName` | The name of your existing Azure AI Foundry resource |
+| `existingFoundryResourceGroup` | The resource group where the Foundry resource is deployed |
 
 Use [aspire cli](https://learn.microsoft.com/en-us/dotnet/aspire/cli/install) to run the sample.
 
@@ -121,8 +137,7 @@ aspire run
 
 Bash:
 ```bash
-curl -sSL https://aspire.dev/install.sh -o aspire-install.sh
-./aspire-install.sh -InstallExtension
+curl -sSL https://aspire.dev/install.sh -o aspire-install.sh && ./aspire-install.sh
 
 aspire run
 ```
