@@ -1,8 +1,6 @@
 // Copyright (c) Microsoft. All rights reserved.
 using Microsoft.Agents.Hosting.AspNetCore;
 using Microsoft.Agents.Storage;
-using BotService.Clients;
-using BotService.Configuration;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 // Add IHttpClient and IHttpClientFactory to the service collection.
@@ -19,7 +17,7 @@ builder.Services.AddSingleton<IStorage, MemoryStorage>();
 builder.Services.AddControllers();
 // Add logic to validate incoming tokens from the Bot Service.
 builder.Services.AddAgentAspNetAuthentication(builder.Configuration);
-
+// Add A2A orchestrator agent singleton
 builder.Services.AddA2AAgents();
 
 WebApplication app = builder.Build();

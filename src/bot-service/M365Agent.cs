@@ -1,48 +1,38 @@
 // Copyright (c) Microsoft. All rights reserved.
 
-using System.Text.Json;
 using Microsoft.Agents.Builder;
 using Microsoft.Agents.Builder.App;
 using Microsoft.Agents.Builder.State;
 using Microsoft.Agents.Core.Models;
-using A2A;
-using BotService.Clients;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using Microsoft.Agents.AI.A2A;
 
 internal sealed class M365Agent : AgentApplication
 {
     private readonly string? _welcomeMessage;
-    private readonly AIAgent _orchestratorA2AAgent;
+    private readonly A2AAgent _orchestratorA2AAgent;
 
     public M365Agent(
-        AIAgent orchestratorA2AAgent,
+        A2AAgent orchestratorA2AAgent,
         AgentApplicationOptions options) : base(options)
     {
         this._orchestratorA2AAgent = orchestratorA2AAgent ?? throw new ArgumentNullException(nameof(orchestratorA2AAgent));
-        _welcomeMessage = "Login successful! You can now interact with the agent.";
+        this._welcomeMessage = "Login successful";
         this.OnConversationUpdate(ConversationUpdateEvents.MembersAdded, this.WelcomeMessageAsync);
-        this.OnActivity(ActivityTypes.Message, this.MessageActivityAsync, rank: RouteRank.Last);
+        this.OnActivity(ActivityTypes.Message, this.ForwardToOrchestrator, rank: RouteRank.Last);
     }
 
-    private async Task MessageActivityAsync(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
+    private async Task ForwardToOrchestrator(ITurnContext turnContext, ITurnState turnState, CancellationToken cancellationToken)
     {
         string conversationId = turnContext.Activity.Conversation.Id;
         string userMessage = turnContext.Activity.Text ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(userMessage))
-        {
-            await turnContext.SendActivityAsync(MessageFactory.Text("Please send a non-empty message."), cancellationToken);
-            return;
-        }
+        // Propagate session to maintain the conversation context in the orchestrator agent.
+        // The state is kept orcherstator-side
+        var session = await _orchestratorA2AAgent.CreateSessionAsync(conversationId);
 
-        AgentResponse response = await this._orchestratorA2AAgent.RunAsync(new ChatMessage(ChatRole.User, userMessage), cancellationToken: cancellationToken);
-
-        // string orchestratorResponse = await _orchestratorA2AClient.SendUserMessageAsync(
-        //     conversationId,
-        //     userMessage,
-        //     cancellationToken);
-
+        AgentResponse response = await this._orchestratorA2AAgent.RunAsync(new ChatMessage(ChatRole.User, userMessage), cancellationToken: cancellationToken, session: session);
         await turnContext.SendActivityAsync(MessageFactory.Text(response.Text), cancellationToken);
     }
 
