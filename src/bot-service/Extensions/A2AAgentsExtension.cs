@@ -11,13 +11,17 @@ public static class A2AExtension
     {
         services.AddSingleton<A2AAgent>(serviceProvider =>
         {
-            // var orchestratorAgentUrl = Environment.GetEnvironmentVariable("services__orchestrator__https__0")
-            //     ?? Environment.GetEnvironmentVariable("services__orchestrator__http__0");
-            string orchestratorAgentUrl = "https://localhost:7197";
+            var orchestratorAgentUrlString = Environment.GetEnvironmentVariable("services__orchestratoragent__https__0")
+                ?? Environment.GetEnvironmentVariable("services__orchestratoragent__http__0");
+            
+            if (string.IsNullOrEmpty(orchestratorAgentUrlString))
+            {
+                throw new InvalidOperationException("Orchestrator Agent URL is not configured. Please set the environment variable 'services__orchestrator__https__0' or 'services__orchestrator__http__0'.");
+            }
 
             IHttpClientFactory httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
             HttpClient orchestratorHttpClient = httpClientFactory.CreateClient(nameof(A2AExtension));
-            orchestratorHttpClient.BaseAddress = new Uri(orchestratorAgentUrl);
+            orchestratorHttpClient.BaseAddress = new Uri(orchestratorAgentUrlString);
             orchestratorHttpClient.Timeout = TimeSpan.FromSeconds(60);
 
             var resolver = new A2ACardResolver(

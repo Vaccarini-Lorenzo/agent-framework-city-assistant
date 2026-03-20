@@ -10,6 +10,7 @@
 #:project ../accommodation-agent/AccommodationAgent.csproj
 #:project ../orchestrator-agent/OrchestratorAgent.csproj
 #:project ../geocoding-mcp-server/GeocodingMcpServer.csproj
+#:project ../bot-service/BotService.csproj
 
 using Aspire.Hosting.Yarp.Transforms;
 
@@ -101,6 +102,20 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
         e.Urls.Add(new() { Url = "/", DisplayText = "💬City Assistant", Endpoint = e.GetEndpoint("http") });
     });
 
+var botService = builder.AddProject("botservice", "../bot-service/BotService.csproj")
+    .WithReference(orchestratorAgent).WaitFor(orchestratorAgent)
+    .WithHttpEndpoint(name: "http", port: 3978, targetPort: 3978, isProxied: false)
+    .WithHttpHealthCheck("/health")
+    .WithUrls((e) =>
+    {
+        e.Urls.Add(new()
+        {
+            Url = "/api/messages",
+            DisplayText = "🤖Bot Service Endpoint",
+            Endpoint = e.GetEndpoint("http")
+        });
+    });
+
 if (builder.ExecutionContext.IsPublishMode)
 {
     builder.AddYarp("yarp")
@@ -114,3 +129,85 @@ if (builder.ExecutionContext.IsPublishMode)
 }
 
 builder.Build().Run();
+
+
+public class Microsoft365AgentSDKResource(string name, string command, string workingDirectory)
+    : ExecutableResource(name, command, workingDirectory), IResourceWithServiceDiscovery;
+    
+public static class M365AgentSDKAppHostingExtension
+{
+    public static IResourceBuilder<T> WithPlayground<T>(
+        this IResourceBuilder<T> builder,
+        Microsoft365AgentChannel channel = Microsoft365AgentChannel.Emulator,
+        [ResourceName] string name = "Microsoft-365-Agent-Playground",
+        Dictionary<string, string>? environments = null)
+        where T : IResourceWithEndpoints
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+
+        string channelArgs = channel switch
+        {
+            Microsoft365AgentChannel.Emulator => "emulator",
+            Microsoft365AgentChannel.WebChat => "webchat",
+            Microsoft365AgentChannel.Teams => "msteams",
+            Microsoft365AgentChannel.DirectLine => "directline",
+            _ => throw new ArgumentOutOfRangeException(nameof(channel), channel, null)
+        };
+
+        if (!builder.Resource.TryGetEndpoints(out var endpoints) || endpoints is null)
+        {
+            throw new InvalidOperationException(
+                "WithPlayground requires the resource to define endpoints before it is called. Call WithUrls(...) before WithPlayground().");
+        }
+
+        var endpointHttp = endpoints.FirstOrDefault(t => t.Name == "http");
+        if (endpointHttp is null)
+        {
+            throw new InvalidOperationException(
+                "WithPlayground requires an endpoint named 'http'.");
+        }
+
+        var appEndpoint = new Uri(
+            $"{endpointHttp.UriScheme}://{endpointHttp.TargetHost}:{endpointHttp.Port}/api/messages");
+
+        environments ??= [];
+        environments["BOT_ENDPOINT"] = appEndpoint.ToString();
+        environments["DEFAULT_CHANNEL_ID"] = channelArgs;
+
+        var workingDirectory = PathNormalizer.NormalizePathForCurrentPlatform(builder.ApplicationBuilder.AppHostDirectory);
+        var sdkResource = new Microsoft365AgentSDKResource(name, "agentsplayground", workingDirectory);
+
+        var resource = builder.ApplicationBuilder.AddResource(sdkResource);
+
+        foreach (var env in environments)
+        {
+            resource.WithEnvironment(env.Key, env.Value);
+        }
+
+        return builder;
+    }
+}
+
+public enum Microsoft365AgentChannel
+{
+    Emulator = 1,
+    WebChat = 2,
+    Teams = 4,
+    DirectLine = 8,
+}
+
+internal static class PathNormalizer
+{
+    public static string NormalizePathForCurrentPlatform(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+
+        // Fix slashes
+        path = path.Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
+
+        return Path.GetFullPath(path);
+    }
+}

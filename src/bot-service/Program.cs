@@ -3,6 +3,8 @@ using Microsoft.Agents.Hosting.AspNetCore;
 using Microsoft.Agents.Storage;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+// Add Aspire services
+builder.AddServiceDefaults();
 // Add IHttpClient and IHttpClientFactory to the service collection.
 builder.Services.AddHttpClient();
 // Add AgentApplicationOptions from appsettings section "AgentApplication".
@@ -24,6 +26,8 @@ WebApplication app = builder.Build();
 // Enable AspNet authentication and authorization
 app.UseAuthentication();
 app.UseAuthorization();
+// Configure health endpoints
+app.MapDefaultEndpoints();
 // Configure routes including /api/messages
 app.ConfigureRoutes();
 app.Run();

@@ -16,4 +16,8 @@
     <PackageReference Include="Microsoft.Agents.AI.A2A" Version="1.0.0-preview.260219.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\service-defaults\ServiceDefaults.csproj" />
+  </ItemGroup>
+
 </Project>

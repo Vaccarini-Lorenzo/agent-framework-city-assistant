@@ -28,6 +28,9 @@ internal sealed class M365Agent : AgentApplication
         string conversationId = turnContext.Activity.Conversation.Id;
         string userMessage = turnContext.Activity.Text ?? string.Empty;
 
+        Console.WriteLine($"Received message from user: {userMessage}");
+        Console.WriteLine($"Conversation ID: {conversationId}");
+
         // Propagate session to maintain the conversation context in the orchestrator agent.
         // The state is kept orcherstator-side
         var session = await _orchestratorA2AAgent.CreateSessionAsync(conversationId);
