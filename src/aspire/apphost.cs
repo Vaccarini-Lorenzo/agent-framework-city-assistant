@@ -106,15 +106,7 @@ var botService = builder.AddProject("botservice", "../bot-service/BotService.csp
     .WithReference(orchestratorAgent).WaitFor(orchestratorAgent)
     .WithHttpEndpoint(name: "http", port: 3978, targetPort: 3978, isProxied: false)
     .WithHttpHealthCheck("/health")
-    .WithUrls((e) =>
-    {
-        e.Urls.Add(new()
-        {
-            Url = "/api/messages",
-            DisplayText = "🤖Bot Service Endpoint",
-            Endpoint = e.GetEndpoint("http")
-        });
-    });
+    .WithPlayground(channel: Microsoft365AgentChannel.Emulator);
 
 if (builder.ExecutionContext.IsPublishMode)
 {
@@ -129,11 +121,13 @@ if (builder.ExecutionContext.IsPublishMode)
 }
 
 builder.Build().Run();
-
-
-public class Microsoft365AgentSDKResource(string name, string command, string workingDirectory)
-    : ExecutableResource(name, command, workingDirectory), IResourceWithServiceDiscovery;
     
+public class Microsoft365AgentSDKResource(string name, string command, string workingDirectory, string[] args)
+    : ExecutableResource(name, command, workingDirectory), IResourceWithServiceDiscovery
+{
+    public string[] Args { get; } = args;
+}
+
 public static class M365AgentSDKAppHostingExtension
 {
     public static IResourceBuilder<T> WithPlayground<T>(
@@ -175,9 +169,20 @@ public static class M365AgentSDKAppHostingExtension
         environments["DEFAULT_CHANNEL_ID"] = channelArgs;
 
         var workingDirectory = PathNormalizer.NormalizePathForCurrentPlatform(builder.ApplicationBuilder.AppHostDirectory);
-        var sdkResource = new Microsoft365AgentSDKResource(name, "agentsplayground", workingDirectory);
 
-        var resource = builder.ApplicationBuilder.AddResource(sdkResource);
+        // Is this a good idea?
+        var npxCommand = OperatingSystem.IsWindows() ? "npx.cmd" : "npx";
+        var sdkResource = new Microsoft365AgentSDKResource(
+            name, npxCommand, workingDirectory, ["--yes", "-D", "@microsoft/m365agentsplayground"]);
+
+        var resource = builder.ApplicationBuilder.AddResource(sdkResource)
+            .WithArgs(context =>
+            {
+                foreach (var arg in sdkResource.Args)
+                {
+                    context.Args.Add(arg);
+                }
+            });
 
         foreach (var env in environments)
         {
