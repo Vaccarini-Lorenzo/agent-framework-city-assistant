@@ -1,9 +1,8 @@
-﻿#:sdk Aspire.AppHost.Sdk@13.1.1
-#:package Aspire.Hosting.AppHost@13.0.0
-#:package Aspire.Hosting.Azure.AIFoundry@13.1.1-preview.1.26105.8
-#:package Aspire.Hosting.Azure.CosmosDB@13.1.1
-#:package Aspire.Hosting.JavaScript@13.1.1
-#:package Aspire.Hosting.Yarp@13.1.1
+﻿#:sdk Aspire.AppHost.Sdk@13.2.0
+#:package Aspire.Hosting.Foundry@13.2.0-preview.1.26170.3
+#:package Aspire.Hosting.Azure.CosmosDB@13.2.0
+#:package Aspire.Hosting.JavaScript@13.2.0
+#:package Aspire.Hosting.Yarp@13.2.0
 
 #:project ../restaurant-agent/RestaurantAgent.csproj
 #:project ../activities-agent/ActivitiesAgent.csproj
@@ -22,7 +21,7 @@ var existingFoundryName = builder.AddParameter("existingFoundryName")
 var existingFoundryResourceGroup = builder.AddParameter("existingFoundryResourceGroup")
     .WithDescription("The resource group of the existing Azure Foundry resource.");
 
-var foundry = builder.AddAzureAIFoundry("foundry")
+var foundry = builder.AddFoundry("foundry")
     .AsExisting(existingFoundryName, existingFoundryResourceGroup);
 
 tenantId.WithParentRelationship(foundry);
@@ -104,6 +103,7 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 
 var botService = builder.AddProject("botservice", "../bot-service/BotService.csproj")
     .WithReference(orchestratorAgent).WaitFor(orchestratorAgent)
+    .WaitFor(orchestratorAgent)
     .WithHttpEndpoint(name: "http", port: 3978, targetPort: 3978, isProxied: false)
     .WithHttpHealthCheck("/health")
     .WithPlayground(channel: Microsoft365AgentChannel.Emulator);
@@ -135,7 +135,7 @@ public static class M365AgentSDKAppHostingExtension
         Microsoft365AgentChannel channel = Microsoft365AgentChannel.Emulator,
         [ResourceName] string name = "Microsoft-365-Agent-Playground",
         Dictionary<string, string>? environments = null)
-        where T : IResourceWithEndpoints
+        where T : IResource
     {
         ArgumentNullException.ThrowIfNull(builder);
 
@@ -170,12 +170,12 @@ public static class M365AgentSDKAppHostingExtension
 
         var workingDirectory = PathNormalizer.NormalizePathForCurrentPlatform(builder.ApplicationBuilder.AppHostDirectory);
 
-        // Is this a good idea?
         var npxCommand = OperatingSystem.IsWindows() ? "npx.cmd" : "npx";
         var sdkResource = new Microsoft365AgentSDKResource(
             name, npxCommand, workingDirectory, ["--yes", "-D", "@microsoft/m365agentsplayground"]);
 
         var resource = builder.ApplicationBuilder.AddResource(sdkResource)
+            .WaitFor(builder as IResourceBuilder<IResource>)
             .WithArgs(context =>
             {
                 foreach (var arg in sdkResource.Args)
