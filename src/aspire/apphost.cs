@@ -1,17 +1,20 @@
-﻿#:sdk Aspire.AppHost.Sdk@13.2.0
-#:package Aspire.Hosting.Foundry@13.2.0-preview.1.26170.3
-#:package Aspire.Hosting.Azure.CosmosDB@13.2.0
-#:package Aspire.Hosting.JavaScript@13.2.0
-#:package Aspire.Hosting.Yarp@13.2.0
+﻿#:sdk Aspire.AppHost.Sdk@13.1.1
+#:package Aspire.Hosting.AppHost@13.0.0
+#:package Aspire.Hosting.Azure.AIFoundry@13.1.1-preview.1.26105.8
+#:package Aspire.Hosting.Azure.CosmosDB@13.1.1
+#:package Aspire.Hosting.JavaScript@13.1.1
+#:package Aspire.Hosting.Yarp@13.1.1
 
 #:project ../restaurant-agent/RestaurantAgent.csproj
 #:project ../activities-agent/ActivitiesAgent.csproj
 #:project ../accommodation-agent/AccommodationAgent.csproj
 #:project ../orchestrator-agent/OrchestratorAgent.csproj
 #:project ../geocoding-mcp-server/GeocodingMcpServer.csproj
-#:project ../bot-service/BotService.csproj
+#:project ../m365-bot-service/M365BotService.csproj
 
+using System.Collections;
 using Aspire.Hosting.Yarp.Transforms;
+using Microsoft.Extensions.Logging;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -21,7 +24,7 @@ var existingFoundryName = builder.AddParameter("existingFoundryName")
 var existingFoundryResourceGroup = builder.AddParameter("existingFoundryResourceGroup")
     .WithDescription("The resource group of the existing Azure Foundry resource.");
 
-var foundry = builder.AddFoundry("foundry")
+var foundry = builder.AddAzureAIFoundry("foundry")
     .AsExisting(existingFoundryName, existingFoundryResourceGroup);
 
 tenantId.WithParentRelationship(foundry);
@@ -101,12 +104,15 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
         e.Urls.Add(new() { Url = "/", DisplayText = "💬City Assistant", Endpoint = e.GetEndpoint("http") });
     });
 
-var botService = builder.AddProject("botservice", "../bot-service/BotService.csproj")
+var botService = builder.AddProject("m365botservice", "../m365-bot-service/M365BotService.csproj")
     .WithReference(orchestratorAgent).WaitFor(orchestratorAgent)
     .WaitFor(orchestratorAgent)
-    .WithHttpEndpoint(name: "http", port: 3978, targetPort: 3978, isProxied: false)
-    .WithHttpHealthCheck("/health")
-    .WithPlayground(channel: Microsoft365AgentChannel.Emulator);
+    .WithHttpEndpoint(name: "http")
+    .WithHttpHealthCheck("/health");
+
+var playground = builder.AddPlayground("Microsoft-365-Agent-Playground", channel: Microsoft365AgentChannel.Emulator)
+    .WaitFor(botService)
+    .WithBotService(botService);
 
 if (builder.ExecutionContext.IsPublishMode)
 {
@@ -130,14 +136,17 @@ public class Microsoft365AgentSDKResource(string name, string command, string wo
 
 public static class M365AgentSDKAppHostingExtension
 {
-    public static IResourceBuilder<T> WithPlayground<T>(
-        this IResourceBuilder<T> builder,
-        Microsoft365AgentChannel channel = Microsoft365AgentChannel.Emulator,
+    public static IResourceBuilder<Microsoft365AgentSDKResource> AddPlayground(
+        this IDistributedApplicationBuilder builder,
         [ResourceName] string name = "Microsoft-365-Agent-Playground",
-        Dictionary<string, string>? environments = null)
-        where T : IResource
+        Microsoft365AgentChannel channel = Microsoft365AgentChannel.Emulator)
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        var workingDirectory = PathNormalizer.NormalizePathForCurrentPlatform(builder.AppHostDirectory);
+        var npxCommand = OperatingSystem.IsWindows() ? "npx.cmd" : "npx";
+        var sdkResource = new Microsoft365AgentSDKResource(
+            name, npxCommand, workingDirectory, ["--yes", "-D", "@microsoft/m365agentsplayground"]);
 
         string channelArgs = channel switch
         {
@@ -148,48 +157,32 @@ public static class M365AgentSDKAppHostingExtension
             _ => throw new ArgumentOutOfRangeException(nameof(channel), channel, null)
         };
 
-        if (!builder.Resource.TryGetEndpoints(out var endpoints) || endpoints is null)
-        {
-            throw new InvalidOperationException(
-                "WithPlayground requires the resource to define endpoints before it is called. Call WithUrls(...) before WithPlayground().");
-        }
-
-        var endpointHttp = endpoints.FirstOrDefault(t => t.Name == "http");
-        if (endpointHttp is null)
-        {
-            throw new InvalidOperationException(
-                "WithPlayground requires an endpoint named 'http'.");
-        }
-
-        var appEndpoint = new Uri(
-            $"{endpointHttp.UriScheme}://{endpointHttp.TargetHost}:{endpointHttp.Port}/api/messages");
-
-        environments ??= [];
-        environments["BOT_ENDPOINT"] = appEndpoint.ToString();
-        environments["DEFAULT_CHANNEL_ID"] = channelArgs;
-
-        var workingDirectory = PathNormalizer.NormalizePathForCurrentPlatform(builder.ApplicationBuilder.AppHostDirectory);
-
-        var npxCommand = OperatingSystem.IsWindows() ? "npx.cmd" : "npx";
-        var sdkResource = new Microsoft365AgentSDKResource(
-            name, npxCommand, workingDirectory, ["--yes", "-D", "@microsoft/m365agentsplayground"]);
-
-        var resource = builder.ApplicationBuilder.AddResource(sdkResource)
-            .WaitFor(builder as IResourceBuilder<IResource>)
+        var resource = builder.AddResource(sdkResource)
             .WithArgs(context =>
             {
                 foreach (var arg in sdkResource.Args)
                 {
                     context.Args.Add(arg);
                 }
+            }).WithEnvironment(context =>
+            {
+                context.EnvironmentVariables["DEFAULT_CHANNEL_ID"] = channelArgs;
             });
 
-        foreach (var env in environments)
-        {
-            resource.WithEnvironment(env.Key, env.Value);
-        }
+        return resource;
+    }
 
-        return builder;
+    public static IResourceBuilder<Microsoft365AgentSDKResource> WithBotService(
+        this IResourceBuilder<Microsoft365AgentSDKResource> builder,
+        IResourceBuilder<IResourceWithEndpoints> botService)
+    {
+        ArgumentNullException.ThrowIfNull(botService);
+
+        return builder.WithEnvironment(context =>
+        {
+            var endpoint = botService.GetEndpoint("http").Url;
+            context.EnvironmentVariables["BOT_ENDPOINT"] = endpoint + "/api/messages";
+        });
     }
 }
 

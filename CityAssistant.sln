@@ -33,9 +33,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GeocodingMcpServer", "src\g
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SharedServices", "src\shared-services\SharedServices.csproj", "{2C1F3CA6-86DB-8F87-0B15-D0CFFABE2B24}"
 EndProject
-Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "bot-service", "bot-service", "{0C7C1156-D665-DE2E-9CD8-FE498A337182}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "m365-bot-service", "m365-bot-service", "{0C7C1156-D665-DE2E-9CD8-FE498A337182}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BotService", "src\bot-service\BotService.csproj", "{B3633694-E2D2-4356-B9B7-2C6C2923E4F5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "M365BotService", "src\m365-bot-service\M365BotService.csproj", "{B3633694-E2D2-4356-B9B7-2C6C2923E4F5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
