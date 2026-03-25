@@ -4,23 +4,24 @@ A multi-agent application built with Microsoft Agent Framework, featuring restau
 
 ## Architecture
 
-The application consists of five main components:
+The application consists of six main components:
 
 1. **Restaurant Agent** - A specialized agent that can search and recommend restaurants by category or keywords
 2. **Accommodation Agent** - A specialized agent that can search and recommend accommodations (hotels, B&Bs, hostels) based on multiple criteria with LLM-based reranking
 3. **Geocoding MCP Server** - A Model Context Protocol server that provides geocoding services (address/landmark to coordinates conversion) shared across agents
 4. **Orchestrator Agent** - An orchestrator that uses the restaurant and accommodation agents as tools via A2A (Agent-to-Agent) communication
 5. **Frontend** - A React-based chat interface that communicates with the orchestrator via A2A protocol
+6. **M365 Bot Service** - An alternative frontend that connects the orchestrator to Microsoft 365 channels (Teams, Emulator, WebChat, DirectLine) via Azure Bot Service
 
 ### Architecture Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                          Frontend (React)                        │
-│                                                                   │
+│                          Frontend (React)                       │
+│                                                                 │
 │  • A2A JavaScript SDK (@a2a-js/sdk)                             │
-│  • Streaming chat interface                                      │
-│  • Theme support & session management                            │
+│  • Streaming chat interface                                     │
+│  • Theme support & session management                           │
 └────────────────────────────┬────────────────────────────────────┘
                              │
                              │ A2A Protocol
@@ -28,35 +29,35 @@ The application consists of five main components:
                              │ (Agent Card, Run, Stream)
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                     Orchestrator Agent (.NET)                    │
-│                                                                   │
-│  • Receives user requests via A2A                                │
-│  • Maintains conversation context (contextId)                    │
-│  • Invokes Restaurant & Accommodation Agents as tools            │
-│  • Stores conversation history in Cosmos DB                      │
+│                     Orchestrator Agent (.NET)                   │
+│                                                                 │
+│  • Receives user requests via A2A                               │
+│  • Maintains conversation context (contextId)                   │
+│  • Invokes Restaurant & Accommodation Agents as tools           │
+│  • Stores conversation history in Cosmos DB                     │
 └───────┬──────────────────┬─────────────────┬────────────────────┘
-        │                  │                 │
-        │ A2A Protocol     │ A2A Protocol    │ Azure Cosmos DB
-        │ /agenta2a/v1/*   │ /agenta2a/v1/*  │ (Thread Storage)
-        │ (Agent-to-Agent) │ (Agent-to-Agent)│
-        ▼                  ▼                 ▼
-┌───────────────────┐  ┌───────────────────────┐
-│ Restaurant Agent  │  │ Accommodation Agent   │
-│      (.NET)       │  │       (.NET)          │
-│                   │  │                       │
-│ • Search tools    │  │ • Multi-criteria      │
-│ • Category filter │  │   search (rating,     │
-│ • Mock data       │  │   location, amenities,│
-│ • A2A endpoint    │  │   price, type)        │
-│                   │  │ • LLM-based reranking │
-│                   │  │ • Mock data           │
-│                   │  │ • A2A endpoint        │
-└─────────┬─────────┘  └─────────┬─────────────┘
-          │                      │
-          │                      │ MCP Protocol
-          │                      │ (HTTP)
-          │                      ▼
-          │            ┌────────────────────────┐
+        │                  │                 │         ▲
+        │ A2A Protocol     │ A2A Protocol    │ Azure   │ A2A Protocol
+        │ /agenta2a/v1/*   │ /agenta2a/v1/*  │ Cosmos  │ /agenta2a/v1/*
+        │ (Agent-to-Agent) │ (Agent-to-Agent)│ DB      │ (Agent-to-Agent)
+        ▼                  ▼                 ▼         │
+┌───────────────────┐  ┌───────────────────────┐  ┌───────────────────────────┐
+│ Restaurant Agent  │  │ Accommodation Agent   │  │   M365 Bot Service (.NET) │
+│      (.NET)       │  │       (.NET)          │  │                           │
+│                   │  │                       │  │ • /api/messages endpoint  │
+│ • Search tools    │  │ • Multi-criteria      │  │ • Azure Bot Service       │
+│ • Category filter │  │   search (rating,     │  │ • Teams, Emulator,        │
+│ • Mock data       │  │   location, amenities,│  │   WebChat, DirectLine     │
+│ • A2A endpoint    │  │   price, type)        │  │ • Forwards to Orchestrator│
+│                   │  │ • LLM-based reranking │  │   via A2A                 │
+│                   │  │ • Mock data           │  └─────────────┬─────────────┘
+│                   │  │ • A2A endpoint        │                │
+└─────────┬─────────┘  └─────────┬─────────────┘                │
+          │                      │                   ┌──────────┴──────────┐
+          │                      │ MCP Protocol      │  M365 Channels      │
+          │                      │ (HTTP)            │  (Teams, Emulator,  │
+          │                      ▼                   │   WebChat, etc.)    │
+          │            ┌────────────────────────┐    └─────────────────────┘
           │            │ Geocoding MCP Server   │
           │            │      (.NET)            │
           │            │                        │
@@ -79,11 +80,13 @@ The application consists of five main components:
 
 Data Flow:
 1. User sends message via Frontend → Orchestrator (A2A)
+   OR via M365 Channel → (ONLY IF NO EMULATOR) Azure Bot Service → M365 Bot Service module → Orchestrator (A2A)
 2. Orchestrator determines which agent(s) are needed
 3. If needed: Orchestrator → Restaurant/Accommodation Agent (A2A as tool)
 4. Accommodation Agent → Geocoding MCP Server (MCP protocol for location lookup)
 5. Agent searches mock data (accommodation agent applies LLM reranking)
 6. Orchestrator streams response back to Frontend (A2A)
+   OR Orchestrator → Bot Service → M365 Channel
 7. All agents persist conversation state to Cosmos DB
 ```
 
@@ -201,6 +204,131 @@ To ease the debug experience, you can use the [Aspire extension for Visual Studi
 - Session management with conversation history using contextId
 - Communicates with orchestrator via A2A protocol
 
+
+## M365 Bot Service module
+
+The m365 bot service module receives messages through the `/api/messages` endpoint, forwards user queries to the orchestrator agent via A2A protocol, and streams responses back to the caller.
+
+### Option 1: Local Demo with Agents Playground (Emulator)
+
+For demo purposes, the Aspire host includes an extension that automatically launches the **Microsoft 365 Agents Playground** (emulator). In this scenario, the emulator directly sends messages to the M365 Bot Service `/api/messages` endpoint: no Azure Bot Service registration is required.
+
+This is configured in `apphost.cs`:
+
+```csharp
+var playground = builder.AddPlayground("Microsoft-365-Agent-Playground", channel: Microsoft365AgentChannel.Emulator)
+    .WaitFor(botService)
+    .WithBotService(botService);
+```
+
+```
+┌─────────────────────────┐       POST /api/messages        ┌─────────────────────────┐
+│  Agents Playground      │ ─────────────────────────────▶  │  M365 Bot Service       │
+│  (Emulator)             │ ◀─────────────────────────────  │  (.NET)                 │
+│                         │       Response                  │                         │
+└─────────────────────────┘                                 └────────────┬────────────┘
+                                                                         │
+                                                                         │ A2A Protocol
+                                                                         ▼
+                                                            ┌─────────────────────────┐
+                                                            │  Orchestrator Agent     │
+                                                            └─────────────────────────┘
+```
+
+> **Note:** In this mode, JWT validation is intentionally disabled to allow the demo to work out of the box (clone & run). See the [Security Disclaimer](#️-security-disclaimer) below.
+
+### Option 2: Azure Bot Service Instance
+
+For production or integration with real M365 channels (Teams, WebChat, DirectLine), you connect through an **Azure Bot Service** instance. In this scenario, the M365 channel (e.g., Teams) sends the message to Azure Bot Service, which then forwards it (with a valid JWT token) to the M365 Bot Service `/api/messages` endpoint.
+
+```
+┌─────────────────┐       ┌─────────────────────┐    POST /api/messages    ┌─────────────────────────┐
+│  M365 Channel   │ ────▶ │  Azure Bot Service  │ ────────(+JWT)────────▶  │  M365 Bot Service       │
+│  (Teams, etc.)  │ ◀──── │  (Cloud)            │ ◀──────────────────────  │  (.NET)                 │
+└─────────────────┘       └─────────────────────┘       Response           └────────────┬────────────┘
+                                                                                        │
+                                                                                        │ A2A Protocol
+                                                                                        ▼
+                                                                           ┌─────────────────────────┐
+                                                                           │  Orchestrator Agent     │
+                                                                           └─────────────────────────┘
+```
+
+To set this up:
+
+1. **Fill the `appsettings.json`** in `src/m365-bot-service/`:
+
+    ```json
+    {
+      "TokenValidation": {
+        // IMPORTANT!
+        "Enabled": true,
+        "Audiences": [
+          "<BOT_APP_CLIENT_ID>"
+        ],
+        "TenantId": "<AZURE_AD_TENANT_ID>"
+      },
+      "AgentApplication": {
+        "StartTypingTimer": true,
+        "RemoveRecipientMention": false,
+        "NormalizeMentions": false
+      },
+      "Connections": {
+        "ServiceConnection": {
+          "Settings": {
+            "AuthType": "ClientSecret",
+            "ClientId": "<BOT_APP_CLIENT_ID>",
+            "ClientSecret": "<BOT_APP_CLIENT_SECRET>",
+            "AuthorityEndpoint": "https://login.microsoftonline.com/<AZURE_AD_TENANT_ID>",
+            "Scopes": [
+              "https://api.botframework.com/.default"
+            ]
+          }
+        }
+      },
+      "ConnectionsMap": [
+        {
+          "ServiceUrl": "*",
+          "Connection": "ServiceConnection"
+        }
+      ],
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft.AspNetCore": "Warning"
+        }
+      }
+    }
+    ```
+
+    Replace all `<BOT_APP_CLIENT_ID>`, `<BOT_APP_CLIENT_SECRET>`, and `<AZURE_AD_TENANT_ID>` placeholders with your actual Azure Bot registration values.
+
+2. **Enable JWT authorization** by uncommenting `.RequireAuthorization()` in `src/m365-bot-service/Extensions/RouteExtension.cs`:
+
+    ```csharp
+    app.MapPost("/api/messages",
+                async (HttpRequest request, HttpResponse response, IAgentHttpAdapter adapter, IAgent agent, CancellationToken cancellationToken) =>
+                {
+                    await adapter.ProcessAsync(request, response, agent, cancellationToken);
+                })
+                .RequireAuthorization();
+    ```
+
+3. **(Optional)** Comment out the playground resource in `apphost.cs` if you no longer need the local emulator.
+
+### ⚠️ Security Disclaimer
+
+> **AS IS, the M365 Bot Service bypasses JWT token validation.** The `.RequireAuthorization()` call is intentionally commented out in `RouteExtension.cs` to allow the demo to work out of the box with the Agents Playground emulator, without any Azure Bot Service registration (clone & run).
+>
+> **This means any request with an empty or missing `Authorization` header will be accepted and processed by the bot.**
+>
+> **For any scenario beyond local demos, you MUST:**
+> 1. **Uncomment `.RequireAuthorization()`** in `RouteExtension.cs`
+> 2. **Set `"Enabled": true`** in the `TokenValidation` section of `appsettings.json` to enforce JWT validation
+>
+> Provide valid `TokenValidation` and `Connections` settings in `appsettings.json`. Failure to do so exposes the bot endpoint to unauthorized access.
+
+
 ## Mock Data
 
 ### Restaurant Agent
@@ -255,6 +383,14 @@ All data is hardcoded in service classes and doesn't require external data sourc
 - `POST /agenta2a/v1/stream` - A2A streaming endpoint for real-time responses
 - `GET /health` - Health check endpoint
 
+### M365 Bot Service
+- `POST /api/messages` - Bot Framework messaging endpoint (receives messages from Agents Playground or Azure Bot Service)
+- `GET /health` - Health check endpoint
+
+### Agents Playground (Emulator)
+- `GET /` - Emulator entrypoint
+
+
 All communication between frontend and orchestrator uses the A2A protocol for standardized message formats, streaming support, and contextId-based conversation management.
 
 The accommodation agent uses the Model Context Protocol (MCP) to communicate with the geocoding server for location-based queries.
@@ -280,11 +416,16 @@ src/
 │   └── Program.cs            # MCP server setup
 ├── orchestrator-agent/       # Orchestrator agent
 │   └── Program.cs            # Main orchestrator logic
+├── m365-bot-service/         # M365 Bot Service (Teams, Emulator, WebChat)
+│   ├── Extensions/           # Route and service extensions
+│   ├── Services/             # A2A client for orchestrator communication
+│   └── Program.cs            # Bot service setup
 ├── frontend/                 # React frontend
 │   └── src/
 │       ├── Chat.tsx         # Main chat component
 │       └── ...
 └── aspire/                   # Aspire orchestration
+    └── apphost.cs           # Single-file Aspire host
 ```
 
 ### Building
