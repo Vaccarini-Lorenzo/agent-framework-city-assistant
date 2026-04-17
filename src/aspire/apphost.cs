@@ -12,9 +12,7 @@
 #:project ../geocoding-mcp-server/GeocodingMcpServer.csproj
 #:project ../m365-bot-service/M365BotService.csproj
 
-using System.Collections;
 using Aspire.Hosting.Yarp.Transforms;
-using Microsoft.Extensions.Logging;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
