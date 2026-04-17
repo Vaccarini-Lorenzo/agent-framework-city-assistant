@@ -106,7 +106,6 @@ var frontend = builder.AddViteApp("frontend", "../frontend")
 
 var botService = builder.AddProject("m365botservice", "../m365-bot-service/M365BotService.csproj")
     .WithReference(orchestratorAgent).WaitFor(orchestratorAgent)
-    .WaitFor(orchestratorAgent)
     .WithHttpEndpoint(name: "http")
     .WithHttpHealthCheck("/health");
 
