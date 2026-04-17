@@ -32,7 +32,7 @@ internal sealed class M365Agent : AgentApplication
         Console.WriteLine($"Conversation ID: {conversationId}");
 
         // Propagate session to maintain the conversation context in the orchestrator agent.
-        // The state is kept orcherstator-side
+        // The state is kept orchestrator-side
         var session = await _orchestratorA2AAgent.CreateSessionAsync(conversationId);
 
         AgentResponse response = await this._orchestratorA2AAgent.RunAsync(new ChatMessage(ChatRole.User, userMessage), cancellationToken: cancellationToken, session: session);
